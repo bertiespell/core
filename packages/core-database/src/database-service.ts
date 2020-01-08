@@ -1,6 +1,6 @@
 import { app } from "@arkecosystem/core-container";
 import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
-import { Database, EventEmitter, Logger, Shared, State } from "@arkecosystem/core-interfaces";
+import { Consensus, Database, EventEmitter, Logger, Shared, State } from "@arkecosystem/core-interfaces";
 import { Wallets } from "@arkecosystem/core-state";
 import { Handlers } from "@arkecosystem/core-transactions";
 import { roundCalculator } from "@arkecosystem/core-utils";
@@ -154,6 +154,8 @@ export class DatabaseService implements Database.IDatabaseService {
         delegates?: State.IWallet[],
     ): Promise<State.IWallet[]> {
         if (!roundInfo) {
+            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+            console.log("hello", consensus);
             const database: Database.IDatabaseService = app.resolvePlugin("database");
             const lastBlock = await database.getLastBlock();
             roundInfo = roundCalculator.calculateRound(lastBlock.data.height);
