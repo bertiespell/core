@@ -1,12 +1,10 @@
 import { app } from "@arkecosystem/core-container";
 import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
 import { Consensus, Database, EventEmitter, Logger, Shared, State } from "@arkecosystem/core-interfaces";
-import { Wallets } from "@arkecosystem/core-state";
 import { Handlers } from "@arkecosystem/core-transactions";
 import { roundCalculator } from "@arkecosystem/core-utils";
 import { Blocks, Crypto, Identities, Interfaces, Managers, Transactions, Utils } from "@arkecosystem/crypto";
 import assert from "assert";
-import cloneDeep from "lodash.clonedeep";
 
 export class DatabaseService implements Database.IDatabaseService {
     public connection: Database.IConnection;
@@ -153,58 +151,8 @@ export class DatabaseService implements Database.IDatabaseService {
         roundInfo?: Shared.IRoundInfo,
         delegates?: State.IWallet[],
     ): Promise<State.IWallet[]> {
-        if (!roundInfo) {
-            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-            console.log("hello", consensus);
-            const database: Database.IDatabaseService = app.resolvePlugin("database");
-            const lastBlock = await database.getLastBlock();
-            roundInfo = roundCalculator.calculateRound(lastBlock.data.height);
-        }
-
-        const { round } = roundInfo;
-
-        if (
-            this.forgingDelegates &&
-            this.forgingDelegates.length &&
-            this.forgingDelegates[0].getAttribute<number>("delegate.round") === round
-        ) {
-            return this.forgingDelegates;
-        }
-
-        // When called during applyRound we already know the delegates, so we don't have to query the database.
-        if (!delegates || delegates.length === 0) {
-            delegates = (await this.connection.roundsRepository.findById(round)).map(({ round, publicKey, balance }) =>
-                Object.assign(new Wallets.Wallet(Identities.Address.fromPublicKey(publicKey)), {
-                    publicKey,
-                    attributes: {
-                        delegate: {
-                            voteBalance: Utils.BigNumber.make(balance),
-                            username: this.walletManager.findByPublicKey(publicKey).getAttribute("delegate.username"),
-                        },
-                    },
-                }),
-            );
-        }
-
-        for (const delegate of delegates) {
-            delegate.setAttribute("delegate.round", round);
-        }
-
-        const seedSource: string = round.toString();
-        let currentSeed: Buffer = Crypto.HashAlgorithms.sha256(seedSource);
-
-        delegates = cloneDeep(delegates);
-        for (let i = 0, delCount = delegates.length; i < delCount; i++) {
-            for (let x = 0; x < 4 && i < delCount; i++ , x++) {
-                const newIndex = currentSeed[x] % delCount;
-                const b = delegates[newIndex];
-                delegates[newIndex] = delegates[i];
-                delegates[i] = b;
-            }
-            currentSeed = Crypto.HashAlgorithms.sha256(currentSeed);
-        }
-
-        return delegates;
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        return consensus.getActiveDelegates(roundInfo, delegates, this.forgingDelegates);
     }
 
     public async getBlock(id: string): Promise<Interfaces.IBlock | undefined> {
