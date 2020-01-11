@@ -18,7 +18,7 @@ export class DatabaseService implements Database.IDatabaseService {
     public transactionsBusinessRepository: Database.ITransactionsBusinessRepository;
     public blocksInCurrentRound: Interfaces.IBlock[] = undefined;
     public restoredDatabaseIntegrity: boolean = false;
-    public forgingDelegates: State.IWallet[] = undefined;
+    public forgingDelegates: State.IWallet[] = undefined; // @deprecated
     public cache: Map<any, any> = new Map();
 
     constructor(
@@ -63,7 +63,8 @@ export class DatabaseService implements Database.IDatabaseService {
     }
 
     public async restoreCurrentRound(height: number): Promise<void> {
-        await this.initializeActiveDelegates(height);
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        await consensus.initializeActiveDelegates(height);
         await this.applyRound(height);
     }
 
@@ -97,22 +98,25 @@ export class DatabaseService implements Database.IDatabaseService {
             const roundInfo: Shared.IRoundInfo = roundCalculator.calculateRound(nextHeight);
             const { round } = roundInfo;
 
+            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+            const forgingDelegates = consensus.forgingDelegates;
+
             if (
                 nextHeight === 1 ||
-                !this.forgingDelegates ||
-                this.forgingDelegates.length === 0 ||
-                this.forgingDelegates[0].getAttribute<number>("delegate.round") !== round
+                !forgingDelegates ||
+                forgingDelegates.length === 0 ||
+                forgingDelegates[0].getAttribute<number>("delegate.round") !== round
             ) {
                 this.logger.info(`Starting Round ${roundInfo.round.toLocaleString()}`);
 
                 try {
                     if (nextHeight > 1) {
-                        this.detectMissedRound(this.forgingDelegates);
+                        this.detectMissedRound(forgingDelegates);
                     }
 
-                    const delegates: State.IWallet[] = this.walletManager.loadActiveDelegateList(roundInfo);
-
-                    await this.setForgingDelegatesOfRound(roundInfo, delegates);
+                    const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+                    const delegates: State.IWallet[] = await consensus.updateDelegates(roundInfo);
+                    
                     await this.saveRound(delegates);
 
                     this.blocksInCurrentRound = [];
@@ -147,12 +151,13 @@ export class DatabaseService implements Database.IDatabaseService {
         await this.connection.roundsRepository.delete(round);
     }
 
+    // @deprecated
     public async getActiveDelegates(
         roundInfo?: Shared.IRoundInfo,
         delegates?: State.IWallet[],
     ): Promise<State.IWallet[]> {
         const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        return consensus.getActiveDelegates(roundInfo, delegates, this.forgingDelegates);
+        return consensus.getActiveDelegates(roundInfo, delegates);
     }
 
     public async getBlock(id: string): Promise<Interfaces.IBlock | undefined> {
@@ -407,10 +412,8 @@ export class DatabaseService implements Database.IDatabaseService {
 
             this.blocksInCurrentRound = await this.getBlocksForRound(roundInfo);
 
-            await this.setForgingDelegatesOfRound(
-                roundInfo,
-                await this.calcPreviousActiveDelegates(roundInfo, this.blocksInCurrentRound),
-            );
+            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+            await consensus.updateForgingDelegatesOfRound(roundInfo, this.blocksInCurrentRound);
 
             await this.deleteRound(nextRound);
         }
@@ -536,10 +539,14 @@ export class DatabaseService implements Database.IDatabaseService {
         const lastSlot: number = Crypto.Slots.getSlotNumber(lastBlock.data.timestamp);
         const currentSlot: number = Crypto.Slots.getSlotNumber(block.data.timestamp);
 
-        const missedSlots: number = Math.min(currentSlot - lastSlot - 1, this.forgingDelegates.length);
+        // TODO: maybe this should just move into consensus plugin too
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        const forgingDelegates = consensus.forgingDelegates;
+
+        const missedSlots: number = Math.min(currentSlot - lastSlot - 1, forgingDelegates.length);
         for (let i = 0; i < missedSlots; i++) {
             const missedSlot: number = lastSlot + i + 1;
-            const delegate: State.IWallet = this.forgingDelegates[missedSlot % this.forgingDelegates.length];
+            const delegate: State.IWallet = forgingDelegates[missedSlot % forgingDelegates.length];
 
             this.logger.debug(
                 `Delegate ${delegate.getAttribute("delegate.username")} (${delegate.publicKey}) just missed a block.`,
@@ -686,50 +693,6 @@ export class DatabaseService implements Database.IDatabaseService {
                 });
             }
         }
-    }
-
-    private async initializeActiveDelegates(height: number): Promise<void> {
-        this.forgingDelegates = undefined;
-
-        const roundInfo: Shared.IRoundInfo = roundCalculator.calculateRound(height);
-
-        await this.setForgingDelegatesOfRound(roundInfo, await this.calcPreviousActiveDelegates(roundInfo));
-    }
-
-    private async setForgingDelegatesOfRound(roundInfo: Shared.IRoundInfo, delegates?: State.IWallet[]): Promise<void> {
-        this.forgingDelegates = await this.getActiveDelegates(roundInfo, delegates);
-    }
-
-    private async calcPreviousActiveDelegates(
-        roundInfo: Shared.IRoundInfo,
-        blocks?: Interfaces.IBlock[],
-    ): Promise<State.IWallet[]> {
-        blocks = blocks || (await this.getBlocksForRound(roundInfo));
-
-        const tempWalletManager = this.walletManager.clone();
-
-        // Revert all blocks in reverse order
-        const index: number = blocks.length - 1;
-
-        let height: number = 0;
-        for (let i = index; i >= 0; i--) {
-            height = blocks[i].data.height;
-
-            if (height === 1) {
-                break;
-            }
-
-            await tempWalletManager.revertBlock(blocks[i]);
-        }
-
-        const delegates: State.IWallet[] = tempWalletManager.loadActiveDelegateList(roundInfo);
-
-        for (const delegate of tempWalletManager.allByUsername()) {
-            const delegateWallet = this.walletManager.findByUsername(delegate.getAttribute("delegate.username"));
-            delegateWallet.setAttribute("delegate.rank", delegate.getAttribute("delegate.rank"));
-        }
-
-        return delegates;
     }
 
     private async emitTransactionEvents(transaction: Interfaces.ITransaction): Promise<void> {

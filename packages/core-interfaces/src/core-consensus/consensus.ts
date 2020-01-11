@@ -4,10 +4,11 @@ import { IRoundInfo } from "../shared";
 
 export interface IConsensus {
 
+    forgingDelegates: IWallet[];
+
     getActiveDelegates(
         roundInfo?: IRoundInfo,
         delegates?: IWallet[],
-        forgingDelegates?: IWallet[],
     ): Promise<IWallet[]>;
 
     updateVoteBalances(
@@ -18,6 +19,14 @@ export interface IConsensus {
         lockTransaction: Interfaces.ITransactionData,
         revert?: boolean,
     ): void;
+
+    updateDelegates(roundInfo?: IRoundInfo): Promise<IWallet[]>;
+
+    initializeActiveDelegates(roundInfo): void;
+
+    updateForgingDelegatesOfRound(roundInfo: IRoundInfo, blocks: Interfaces.IBlock[]): Promise<void>;
+
+    buildVoteBalances(): void;
 
     buildDelegateRanking(roundInfo?: IRoundInfo): IWallet[];
 }

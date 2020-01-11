@@ -2,7 +2,6 @@ import { app } from "@arkecosystem/core-container";
 import { Consensus, Logger, Shared, State } from "@arkecosystem/core-interfaces";
 import { Handlers, Interfaces as TransactionInterfaces } from "@arkecosystem/core-transactions";
 import { Enums, Identities, Interfaces, Utils } from "@arkecosystem/crypto";
-import pluralize from "pluralize";
 import { WalletIndexAlreadyRegisteredError, WalletIndexNotFoundError } from "./errors";
 import { TempWalletManager } from "./temp-wallet-manager";
 import { Wallet } from "./wallet";
@@ -222,34 +221,17 @@ export class WalletManager implements State.IWalletManager {
         return new TempWalletManager(this);
     }
 
+    // @deprecated
     public loadActiveDelegateList(roundInfo: Shared.IRoundInfo): State.IWallet[] {
         const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        const delegates: State.IWallet[] = consensus.buildDelegateRanking(roundInfo);
-        
-        const { maxDelegates } = roundInfo;
-
-        if (delegates.length < maxDelegates) {
-            throw new Error(
-                `Expected to find ${maxDelegates} delegates but only found ${delegates.length}. ` +
-                    `This indicates an issue with the genesis block & delegates.`,
-            );
-        }
-
-        this.logger.debug(`Loaded ${delegates.length} active ${pluralize("delegate", delegates.length)}`);
-
-        return delegates;
+        return consensus.buildDelegateRanking(roundInfo);
     }
 
+    // @deprecated
     // Only called during integrity verification on boot.
     public buildVoteBalances(): void {
-        for (const voter of this.allByPublicKey()) {
-            if (voter.hasVoted()) {
-                const delegate: State.IWallet = this.findByPublicKey(voter.getAttribute<string>("vote"));
-                const voteBalance: Utils.BigNumber = delegate.getAttribute("delegate.voteBalance");
-                const lockedBalance = voter.getAttribute("htlc.lockedBalance", Utils.BigNumber.ZERO);
-                delegate.setAttribute("delegate.voteBalance", voteBalance.plus(voter.balance).plus(lockedBalance));
-            }
-        }
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        consensus.buildVoteBalances();
     }
 
     public async applyBlock(block: Interfaces.IBlock): Promise<void> {
@@ -410,6 +392,7 @@ export class WalletManager implements State.IWalletManager {
         }
     }
 
+    // @deprecated
     public buildDelegateRanking(roundInfo?: Shared.IRoundInfo): State.IWallet[] {
         const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
         return consensus.buildDelegateRanking(roundInfo);
