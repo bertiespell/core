@@ -1,7 +1,6 @@
 import { app } from "@arkecosystem/core-container";
-import { Blockchain, Database, EventEmitter, Logger, P2P, TransactionPool } from "@arkecosystem/core-interfaces";
-import { isWhitelisted, roundCalculator } from "@arkecosystem/core-utils";
-import { Crypto } from "@arkecosystem/crypto";
+import { Blockchain, EventEmitter, Logger, P2P, TransactionPool } from "@arkecosystem/core-interfaces";
+import { isWhitelisted } from "@arkecosystem/core-utils";
 import { process } from "ipaddr.js";
 
 export const acceptNewPeer = async ({ service, req }: { service: P2P.IPeerService; req }): Promise<void> => {
@@ -32,37 +31,6 @@ export const getUnconfirmedTransactions = async (): Promise<P2P.IUnconfirmedTran
     return {
         transactions: await transactionPool.getTransactionsForForging(maxTransactions),
         poolSize: await transactionPool.getPoolSize(),
-    };
-};
-
-export const getCurrentRound = async (): Promise<P2P.ICurrentRound> => {
-    const config = app.getConfig();
-    const databaseService = app.resolvePlugin<Database.IDatabaseService>("database");
-    const blockchain = app.resolvePlugin<Blockchain.IBlockchain>("blockchain");
-
-    const lastBlock = blockchain.getLastBlock();
-
-    const height = lastBlock.data.height + 1;
-    const roundInfo = roundCalculator.calculateRound(height);
-    const { maxDelegates, round } = roundInfo;
-
-    const blockTime = config.getMilestone(height).blocktime;
-    const reward = config.getMilestone(height).reward;
-    const delegates = await databaseService.getActiveDelegates(roundInfo);
-    const timestamp = Crypto.Slots.getTime();
-    const blockTimestamp = Crypto.Slots.getSlotNumber(timestamp) * blockTime;
-    const currentForger = parseInt((timestamp / blockTime) as any) % maxDelegates;
-    const nextForger = (parseInt((timestamp / blockTime) as any) + 1) % maxDelegates;
-
-    return {
-        current: round,
-        reward,
-        timestamp: blockTimestamp,
-        delegates,
-        currentForger: delegates[currentForger],
-        nextForger: delegates[nextForger],
-        lastBlock: lastBlock.data,
-        canForge: parseInt((1 + lastBlock.data.timestamp / blockTime) as any) * blockTime < timestamp - 1,
     };
 };
 

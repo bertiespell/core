@@ -1,5 +1,5 @@
 import { app } from "@arkecosystem/core-container";
-import { Consensus, Logger, Shared, State } from "@arkecosystem/core-interfaces";
+import { Consensus, Logger, State } from "@arkecosystem/core-interfaces";
 import { Handlers, Interfaces as TransactionInterfaces } from "@arkecosystem/core-transactions";
 import { Enums, Identities, Interfaces, Utils } from "@arkecosystem/crypto";
 import { WalletIndexAlreadyRegisteredError, WalletIndexNotFoundError } from "./errors";
@@ -221,19 +221,6 @@ export class WalletManager implements State.IWalletManager {
         return new TempWalletManager(this);
     }
 
-    // @deprecated
-    public loadActiveDelegateList(roundInfo: Shared.IRoundInfo): State.IWallet[] {
-        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        return consensus.buildDelegateRanking(roundInfo);
-    }
-
-    // @deprecated
-    // Only called during integrity verification on boot.
-    public buildVoteBalances(): void {
-        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        consensus.buildVoteBalances();
-    }
-
     public async applyBlock(block: Interfaces.IBlock): Promise<void> {
         this.currentBlock = block;
         const generatorPublicKey: string = block.data.generatorPublicKey;
@@ -268,6 +255,7 @@ export class WalletManager implements State.IWalletManager {
             // by reward + totalFee. In which case the vote balance of the
             // delegate's delegate has to be updated.
             if (applied && delegate.hasVoted()) {
+                // TODO: move
                 const increase: Utils.BigNumber = block.data.reward.plus(block.data.totalFee);
                 const votedDelegate: State.IWallet = this.findByPublicKey(delegate.getAttribute<string>("vote"));
                 const voteBalance: Utils.BigNumber = votedDelegate.getAttribute("delegate.voteBalance");
@@ -293,7 +281,6 @@ export class WalletManager implements State.IWalletManager {
         }
         this.currentBlock = block;
 
-        const delegate: State.IWallet = this.findByPublicKey(block.data.generatorPublicKey);
         const revertedTransactions: Interfaces.ITransaction[] = [];
 
         try {
@@ -304,17 +291,6 @@ export class WalletManager implements State.IWalletManager {
                 revertedTransactions.push(transaction);
             }
 
-            const reverted: boolean = delegate.revertBlock(block.data);
-
-            // If the block has been reverted, the balance is decreased
-            // by reward + totalFee. In which case the vote balance of the
-            // delegate's delegate has to be updated.
-            if (reverted && delegate.hasVoted()) {
-                const decrease: Utils.BigNumber = block.data.reward.plus(block.data.totalFee);
-                const votedDelegate: State.IWallet = this.findByPublicKey(delegate.getAttribute<string>("vote"));
-                const voteBalance: Utils.BigNumber = votedDelegate.getAttribute("delegate.voteBalance");
-                votedDelegate.setAttribute("delegate.voteBalance", voteBalance.minus(decrease));
-            }
         } catch (error) {
             this.logger.error(error.stack);
 
@@ -351,7 +327,7 @@ export class WalletManager implements State.IWalletManager {
         const recipient: State.IWallet = this.findByAddress(transaction.data.recipientId);
 
         const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        consensus.updateVoteBalances(sender, recipient, transaction.data, lockWallet, lockTransaction);
+        consensus.addTransaction(sender, recipient, transaction.data, lockWallet, lockTransaction);
     }
 
     public async revertTransaction(transaction: Interfaces.ITransaction): Promise<void> {
@@ -379,7 +355,7 @@ export class WalletManager implements State.IWalletManager {
 
         // Revert vote balance updates
         const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        consensus.updateVoteBalances(sender, recipient, transaction.data, lockWallet, lockTransaction, true);
+        consensus.addTransaction(sender, recipient, transaction.data, lockWallet, lockTransaction, true);
     }
 
     public canBePurged(wallet: State.IWallet): boolean {
@@ -390,11 +366,5 @@ export class WalletManager implements State.IWalletManager {
         for (const walletIndex of Object.values(this.indexes)) {
             walletIndex.clear();
         }
-    }
-
-    // @deprecated
-    public buildDelegateRanking(roundInfo?: Shared.IRoundInfo): State.IWallet[] {
-        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
-        return consensus.buildDelegateRanking(roundInfo);
     }
 }

@@ -1,7 +1,6 @@
 import { app } from "@arkecosystem/core-container";
-import { Database, Logger, P2P, Shared, State, TransactionPool } from "@arkecosystem/core-interfaces";
+import { Consensus, Database, Logger, P2P, State, TransactionPool } from "@arkecosystem/core-interfaces";
 import { Wallets } from "@arkecosystem/core-state";
-import { roundCalculator } from "@arkecosystem/core-utils";
 import { Blocks, Enums, Interfaces, Managers, Utils } from "@arkecosystem/crypto";
 import { Blockchain } from "../blockchain";
 import { FailedToReplayBlocksError } from "./errors";
@@ -137,17 +136,9 @@ export class ReplayBlockchain extends Blockchain {
             }
         }
 
-        this.walletManager.buildVoteBalances();
-
         this.state.setLastBlock(genesisBlock);
-
-        const roundInfo: Shared.IRoundInfo = roundCalculator.calculateRound(1);
-        const delegates: State.IWallet[] = this.walletManager.loadActiveDelegateList(roundInfo);
-
-        (this.localDatabase as any).forgingDelegates = await this.localDatabase.getActiveDelegates(
-            roundInfo,
-            delegates,
-        );
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        consensus.initialize(true);
 
         this.logger.info("Finished loading genesis block.");
     }

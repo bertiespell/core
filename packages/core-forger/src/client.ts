@@ -66,9 +66,9 @@ export class Client {
         }
     }
 
+    // TODO:
     public async getRound(): Promise<P2P.ICurrentRound> {
         await this.selectHost();
-
         return this.emit<P2P.ICurrentRound>("p2p.internal.getCurrentRound");
     }
 

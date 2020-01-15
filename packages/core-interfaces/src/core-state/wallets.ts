@@ -1,6 +1,5 @@
 import { Interfaces, Utils } from "@arkecosystem/crypto";
-import { Logger, Shared } from "../index";
-import { IRoundInfo } from "../shared";
+import { Logger } from "../index";
 
 export type WalletIndexer = (index: IWalletIndex, wallet: IWallet) => void;
 
@@ -118,13 +117,7 @@ export interface IWalletManager {
 
     clone(): IWalletManager;
 
-    loadActiveDelegateList(roundInfo: IRoundInfo): IWallet[];
-
-    buildVoteBalances(): void;
-
     applyBlock(block: Interfaces.IBlock): Promise<void>;
-
-    buildDelegateRanking(roundInfo?: Shared.IRoundInfo): IWallet[];
 
     revertBlock(block: Interfaces.IBlock): Promise<void>;
 

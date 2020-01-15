@@ -1,6 +1,6 @@
 // tslint:disable:max-classes-per-file
 import { app } from "@arkecosystem/core-container";
-import { Database, Logger, P2P, Shared, State } from "@arkecosystem/core-interfaces";
+import { Consensus, Database, Logger, P2P, State } from "@arkecosystem/core-interfaces";
 import { CappedSet, NSect, roundCalculator } from "@arkecosystem/core-utils";
 import { Blocks, Interfaces } from "@arkecosystem/crypto";
 import assert from "assert";
@@ -333,8 +333,6 @@ export class PeerVerifier {
         // the last block in a round (so that the delegates calculations are still the same for
         // both chains).
 
-        const delegates = await this.getDelegatesByRound(roundInfo);
-
         const hisBlocksByHeight = {};
 
         const endHeight = Math.min(claimedHeight, lastBlockHeightInRound);
@@ -354,43 +352,12 @@ export class PeerVerifier {
             }
             assert(hisBlocksByHeight[height] !== undefined);
 
-            if (!(await this.verifyPeerBlock(hisBlocksByHeight[height], height, delegates))) {
+            if (!(await this.verifyPeerBlock(hisBlocksByHeight[height], height))) {
                 return false;
             }
         }
 
         return true;
-    }
-
-    /**
-     * Get the delegates for the given round.
-     */
-    private async getDelegatesByRound(roundInfo: Shared.IRoundInfo): Promise<Record<string, State.IWallet>> {
-        const { round, maxDelegates } = roundInfo;
-
-        let delegates = await this.database.getActiveDelegates(roundInfo);
-
-        if (delegates.length === 0) {
-            // This must be the current round, still not saved into the database (it is saved
-            // only after it has completed). So fetch the list of delegates from the wallet
-            // manager.
-
-            delegates = this.database.walletManager.loadActiveDelegateList(roundInfo);
-            assert.strictEqual(
-                delegates.length,
-                maxDelegates,
-                `Couldn't derive the list of delegates for round ${round}. The database ` +
-                    `returned empty list and the wallet manager returned ${this.anyToString(delegates)}.`,
-            );
-        }
-
-        const delegatesByPublicKey = {} as Record<string, State.IWallet>;
-
-        for (const delegate of delegates) {
-            delegatesByPublicKey[delegate.publicKey] = delegate;
-        }
-
-        return delegatesByPublicKey;
     }
 
     /**
@@ -459,7 +426,6 @@ export class PeerVerifier {
     private async verifyPeerBlock(
         blockData: Interfaces.IBlockData,
         expectedHeight: number,
-        delegatesByPublicKey: Record<string, State.IWallet>,
     ): Promise<boolean> {
         if (PeerVerifier.verifiedBlocks.has(blockData.id)) {
             this.log(
@@ -489,7 +455,9 @@ export class PeerVerifier {
             return false;
         }
 
-        if (delegatesByPublicKey[block.data.generatorPublicKey]) {
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+
+        if (await consensus.verifyBlock(block.data, height)) {
             this.log(
                 Severity.DEBUG_EXTRA,
                 `successfully verified block at height ${height}, signed by ` + block.data.generatorPublicKey,
@@ -500,12 +468,13 @@ export class PeerVerifier {
             return true;
         }
 
-        this.log(
-            Severity.DEBUG_EXTRA,
-            `failure: block ${this.anyToString(blockData)} is not signed by any of the delegates ` +
-                `for the corresponding round: ` +
-                this.anyToString(Object.values(delegatesByPublicKey)),
-        );
+        // TODO: could either log in consensus plugin, or return Result object (containing log information)
+        // this.log(
+        //     Severity.DEBUG_EXTRA,
+        //     `failure: block ${this.anyToString(blockData)} is not signed by any of the delegates ` +
+        //         `for the corresponding round: ` +
+        //         this.anyToString(Object.values(delegatesByPublicKey)),
+        // );
 
         return false;
     }

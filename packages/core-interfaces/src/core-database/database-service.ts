@@ -1,7 +1,7 @@
 import { Interfaces } from "@arkecosystem/crypto";
-import { IWallet, IWalletManager } from "../core-state/wallets";
+import { IWalletManager } from "../core-state/wallets"; // IWallet
 import { EventEmitter, Logger } from "../index";
-import { IRoundInfo } from "../shared";
+
 import {
     IBlocksBusinessRepository,
     ITransactionsBusinessRepository,
@@ -37,10 +37,6 @@ export interface IDatabaseService {
     restoredDatabaseIntegrity: boolean;
 
     verifyBlockchain(): Promise<boolean>;
-
-    getActiveDelegates(roundInfo?: IRoundInfo, delegates?: IWallet[]): Promise<IWallet[]>;
-
-    restoreCurrentRound(height: number): Promise<void>;
 
     buildWallets(): Promise<void>;
 
@@ -84,10 +80,6 @@ export interface IDatabaseService {
 
     getRecentBlockIds(): Promise<string[]>;
 
-    saveRound(activeDelegates: IWallet[]): Promise<void>;
-
-    deleteRound(round: number): Promise<void>;
-
     getTransaction(id: string): Promise<any>;
 
     getForgedTransactionsIds(ids: string[]): Promise<any[]>;
@@ -96,19 +88,11 @@ export interface IDatabaseService {
 
     reset(): Promise<void>;
 
-    loadBlocksFromCurrentRound(): Promise<void>;
-
-    applyRound(height: number): Promise<void>;
-
-    revertRound(height: number): Promise<void>;
-
     applyBlock(block: Interfaces.IBlock): Promise<void>;
 
     revertBlock(block: Interfaces.IBlock): Promise<void>;
 
     verifyTransaction(transaction: Interfaces.ITransaction): Promise<boolean>;
-
-    getBlocksForRound(roundInfo?: IRoundInfo): Promise<Interfaces.IBlock[]>;
 
     getCommonBlocks(ids: string[]): Promise<Interfaces.IBlockData[]>;
 }

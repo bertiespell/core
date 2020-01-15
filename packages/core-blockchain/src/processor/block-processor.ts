@@ -1,12 +1,12 @@
 // tslint:disable:max-classes-per-file
 
 import { app } from "@arkecosystem/core-container";
-import { Logger } from "@arkecosystem/core-interfaces";
+import { Consensus, Logger } from "@arkecosystem/core-interfaces";
 import { Handlers } from "@arkecosystem/core-transactions";
 import { isBlockChained } from "@arkecosystem/core-utils";
 import { Interfaces, Utils } from "@arkecosystem/crypto";
 import { Blockchain } from "../blockchain";
-import { validateGenerator } from "../utils/validate-generator";
+
 import {
     AcceptBlockHandler,
     AlreadyForgedHandler,
@@ -51,8 +51,8 @@ export class BlockProcessor {
         if (this.blockContainsOutOfOrderNonce(block)) {
             return new NonceOutOfOrderHandler(this.blockchain, block);
         }
-
-        const isValidGenerator: boolean = await validateGenerator(block);
+        const consensus = app.resolvePlugin<Consensus.IConsensus>("consensus");
+        const isValidGenerator: boolean = await consensus.validateGenerator(block);
         const isChained: boolean = isBlockChained(this.blockchain.getLastBlock().data, block.data);
         if (!isChained) {
             return new UnchainedHandler(this.blockchain, block, isValidGenerator);
