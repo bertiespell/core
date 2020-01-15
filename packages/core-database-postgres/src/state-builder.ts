@@ -1,6 +1,6 @@
 import { app } from "@arkecosystem/core-container";
 import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
-import { Database, EventEmitter, Logger, State } from "@arkecosystem/core-interfaces";
+import { Consensus, Database, EventEmitter, Logger, State } from "@arkecosystem/core-interfaces";
 import { Handlers } from "@arkecosystem/core-transactions";
 import { Utils } from "@arkecosystem/crypto";
 
@@ -34,8 +34,9 @@ export class StateBuilder {
         }
 
         this.logger.info(`State Generation - Step ${steps} of ${steps}: Vote Balances & Delegate Ranking`);
-        this.walletManager.buildVoteBalances();
-        this.walletManager.buildDelegateRanking();
+
+        const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+        await consensus.initialize();
 
         this.logger.info(
             `State Generation complete! Wallets in memory: ${Object.keys(this.walletManager.allByAddress()).length}`,

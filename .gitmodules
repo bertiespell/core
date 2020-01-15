@@ -1,0 +1,3 @@
+[submodule "plugins/consensus"]
+	path = plugins/consensus
+	url = https://github.com/bertiespell/consensus

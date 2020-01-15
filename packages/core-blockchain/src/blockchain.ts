@@ -3,6 +3,7 @@ import { app } from "@arkecosystem/core-container";
 import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
 import {
     Blockchain as blockchain,
+    Consensus,
     Database,
     EventEmitter,
     Logger,
@@ -12,7 +13,7 @@ import {
 } from "@arkecosystem/core-interfaces";
 import { Blocks, Crypto, Interfaces, Managers, Utils } from "@arkecosystem/crypto";
 
-import { isBlockChained, roundCalculator } from "@arkecosystem/core-utils";
+import { isBlockChained } from "@arkecosystem/core-utils";
 import async from "async";
 import delay from "delay";
 import pluralize from "pluralize";
@@ -392,7 +393,8 @@ export class Blockchain implements blockchain.IBlockchain {
 
         try {
             await this.database.deleteBlocks(blocks);
-            await this.database.loadBlocksFromCurrentRound();
+            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+            await consensus.loadNextBlock(blocks[0].height);
         } catch (error) {
             logger.error(`Encountered error while removing blocks: ${error.message}`);
         }
@@ -444,7 +446,6 @@ export class Blockchain implements blockchain.IBlockchain {
 
                 const lastBlock: Interfaces.IBlock = await this.database.getLastBlock();
                 const lastHeight: number = lastBlock.data.height;
-                const deleteRoundsAfter: number = roundCalculator.calculateRound(lastHeight).round;
 
                 logger.info(
                     `Reverting ${pluralize("block", acceptedBlocks.length, true)} back to last height: ${lastHeight}`,
@@ -457,8 +458,8 @@ export class Blockchain implements blockchain.IBlockchain {
                 this.state.setLastBlock(lastBlock);
                 this.resetLastDownloadedBlock();
 
-                await this.database.deleteRound(deleteRoundsAfter + 1);
-                await this.database.loadBlocksFromCurrentRound();
+                const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+                await consensus.loadNextBlock(lastHeight);
 
                 return callback();
             }

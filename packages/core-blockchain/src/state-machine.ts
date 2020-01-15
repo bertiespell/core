@@ -2,8 +2,8 @@
 
 import { app } from "@arkecosystem/core-container";
 import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
-import { EventEmitter, Logger, State } from "@arkecosystem/core-interfaces";
-import { isBlockChained, roundCalculator } from "@arkecosystem/core-utils";
+import { Consensus, EventEmitter, Logger, State } from "@arkecosystem/core-interfaces";
+import { isBlockChained } from "@arkecosystem/core-utils";
 import { Interfaces, Utils } from "@arkecosystem/crypto";
 
 import pluralize from "pluralize";
@@ -141,8 +141,8 @@ blockchainMachine.actionMap = (blockchain: Blockchain) => ({
 
                     return blockchain.dispatch("FAILURE");
                 }
-
-                await blockchain.database.deleteRound(1);
+                const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+                await consensus.shutdown(1);
             }
 
             /** *******************************
@@ -151,12 +151,12 @@ blockchainMachine.actionMap = (blockchain: Blockchain) => ({
             stateStorage.setLastBlock(block);
 
             // Delete all rounds from the future due to shutdown before processBlocks finished writing the blocks.
-            const roundInfo = roundCalculator.calculateRound(block.data.height);
-            await blockchain.database.deleteRound(roundInfo.round + 1);
+            const consensus: Consensus.IConsensus = app.resolvePlugin("consensus");
+            await consensus.shutdown(block.data.height + 1);
 
             if (stateStorage.networkStart) {
                 await blockchain.database.buildWallets();
-                await blockchain.database.restoreCurrentRound(block.data.height);
+                await consensus.restoreBlock(block.data.height);
                 await blockchain.transactionPool.buildWallets();
                 await blockchain.p2p.getMonitor().start();
 
@@ -179,8 +179,7 @@ blockchainMachine.actionMap = (blockchain: Blockchain) => ({
              ******************************* */
             // Integrity Verification
             await blockchain.database.buildWallets();
-
-            await blockchain.database.restoreCurrentRound(block.data.height);
+            await consensus.restoreBlock(block.data.height);
             await blockchain.transactionPool.buildWallets();
 
             await blockchain.p2p.getMonitor().start();
